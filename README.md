@@ -10,20 +10,27 @@ It exposes the xpensli agent API as MCP tools: process receipts, query expenses,
 
 | Tool | Cost (USDC) | What it does |
 |------|-------------|--------------|
-| `xpensli_provision_account` | Free | Create an agent account linked to an xpensli user; returns a `setup_url` for one-time Gmail authorization. Onboarding only. |
-| `xpensli_process_receipt` | ~$0.05 | Extract & file a receipt (vendor, amount, date, Schedule C category) from a local file or public URL. |
+| `xpensli_categorize_receipt` | ~$0.04 | Extract & categorize a receipt **without storing it**. Needs no account and no setup — start here. First few calls each day are free. |
+| `xpensli_process_receipt` | ~$0.05 | Extract & **file** a receipt (vendor, amount, date, Schedule C category) from a local file or public URL, keeping it on the books. |
 | `xpensli_query_expenses` | ~$0.02 | Answer a natural-language question about tracked expenses. |
 | `xpensli_monthly_report` | ~$0.10 | Monthly summary by category with deductible totals. |
 | `xpensli_annual_report` | ~$0.25 | Full-year Schedule C breakdown + downloadable CSV. |
 | `xpensli_export_csv` | ~$0.05 | Export receipts in a date range as a signed-URL CSV. |
+| `xpensli_provision_account` | Free | **Optional.** Link this agent to an *existing* xpensli user's account, so receipts file into their books instead of the wallet's. Returns a `setup_url` the user opens once. |
 
 Prices are advertised live in each x402 `402` challenge; `XPENSLI_MAX_USDC_PER_CALL` is a hard ceiling your wallet will never exceed.
 
 ## Prerequisites
 
-1. **An xpensli account.** The agent account links to an existing xpensli user by email.
-2. **A provisioned `account_id`.** Run `xpensli_provision_account` once, have the user open the returned `setup_url` to authorize Gmail, then put the `account_id` in your config.
-3. **A funded wallet on Base.** A `0x`-prefixed private key holding USDC on Base mainnet (`base`). For testing, use `base-sepolia` with testnet USDC from [faucet.circle.com](https://faucet.circle.com).
+**One: a funded wallet on Base.** A `0x`-prefixed private key holding USDC on Base mainnet (`base`). For testing, use `base-sepolia` with testnet USDC from [faucet.circle.com](https://faucet.circle.com).
+
+That's it. No xpensli account, no sign-up, no `account_id`, no Gmail authorization, no human in the loop. Your wallet **is** your account: the first paid call creates a tenant for it automatically, and everything you file belongs to that wallet.
+
+### When you *do* want an account_id
+
+Set `XPENSLI_ACCOUNT_ID` only if the agent is acting **on behalf of an existing xpensli user** and receipts should land in that person's books rather than the wallet's own. That is the one case that needs a human: run `xpensli_provision_account`, have the user open the returned `setup_url`, then put the `account_id` in your config.
+
+If you're not sure which you want, you want the wallet. Leave `XPENSLI_ACCOUNT_ID` unset.
 
 ## Configuration
 
@@ -31,8 +38,8 @@ All configuration is via environment variables:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `XPENSLI_ACCOUNT_ID` | for paid tools | — | Provisioned agent account (`acc_…`). |
 | `XPENSLI_WALLET_PRIVATE_KEY` | for paid tools | — | `0x`-prefixed key of the paying wallet (held locally). |
+| `XPENSLI_ACCOUNT_ID` | **no** | — | Only for the linked flow (see Prerequisites). Unset = the wallet is its own account. |
 | `XPENSLI_NETWORK` | no | `base` | `base` (mainnet) or `base-sepolia` (testnet). |
 | `XPENSLI_MAX_USDC_PER_CALL` | no | `1` | Hard per-call spend ceiling in USDC. |
 | `XPENSLI_BASE_URL` | no | `https://xpensli.app` | Agent API origin (override for testing). |
@@ -51,7 +58,6 @@ Edit `claude_desktop_config.json`:
       "command": "npx",
       "args": ["-y", "@xpensli/mcp-server"],
       "env": {
-        "XPENSLI_ACCOUNT_ID": "acc_your_account_id",
         "XPENSLI_WALLET_PRIVATE_KEY": "0xyour_funded_wallet_private_key",
         "XPENSLI_NETWORK": "base",
         "XPENSLI_MAX_USDC_PER_CALL": "1",
@@ -62,7 +68,7 @@ Edit `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. The six `xpensli_*` tools appear in the tools menu.
+Restart Claude Desktop. The seven `xpensli_*` tools appear in the tools menu.
 
 ### Cursor
 
@@ -75,7 +81,6 @@ Edit `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per-project):
       "command": "npx",
       "args": ["-y", "@xpensli/mcp-server"],
       "env": {
-        "XPENSLI_ACCOUNT_ID": "acc_your_account_id",
         "XPENSLI_WALLET_PRIVATE_KEY": "0xyour_funded_wallet_private_key",
         "XPENSLI_NETWORK": "base",
         "XPENSLI_MAX_USDC_PER_CALL": "1",
@@ -96,7 +101,11 @@ Each paid tool call:
 2. The server signs a USDC authorization (≤ `XPENSLI_MAX_USDC_PER_CALL`) with your wallet and retries.
 3. xpensli verifies, settles on Base, runs the work, and returns the result. The settlement transaction hash is included in the tool output.
 
-If the account isn't linked yet, paid tools return the `setup_url` to present to the user.
+`xpensli_categorize_receipt` has a small daily free allowance, so you can try it before spending anything.
+
+If a settlement fails after the work succeeded, you are **not** charged and no result is returned — retry with a fresh authorization, and do not raise the amount. The price is unchanged.
+
+The `setup_url` response only appears if you configured an `XPENSLI_ACCOUNT_ID` that hasn't been linked yet. With no account configured there is nothing to link.
 
 ## Development
 

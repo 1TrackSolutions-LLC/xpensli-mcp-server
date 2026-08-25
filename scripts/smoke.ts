@@ -5,10 +5,13 @@
  * Run (testnet, against the develop preview):
  *   XPENSLI_BASE_URL=https://xpensli-git-develop-eforks-projects.vercel.app \
  *   XPENSLI_NETWORK=base-sepolia \
- *   XPENSLI_ACCOUNT_ID=acc_… \
  *   XPENSLI_WALLET_PRIVATE_KEY=0x… \
  *   VERCEL_BYPASS_SECRET=…            # only needed for protected preview deploys
  *   npm run smoke
+ *
+ * XPENSLI_ACCOUNT_ID is OPTIONAL and deliberately absent above — the default
+ * path is wallet-only, and that is the one worth smoke-testing. Set it to
+ * exercise the linked flow instead.
  *
  * This is a dev utility, not shipped in the published package.
  */
@@ -51,6 +54,12 @@ async function main(): Promise<void> {
     plainFetch: ((input, init) => baseFetch(input as string, init)) as FetchLike,
     payFetch,
   });
+
+  console.error(
+    config.accountId
+      ? "\n[smoke] mode: LINKED (account_id set)"
+      : "\n[smoke] mode: WALLET-ONLY — the wallet is its own tenant, no setup involved",
+  );
 
   console.error("\n[smoke] calling xpensli_query_expenses (paid)…");
   const r = await client.query({ query: "How much did I spend on meals this year?" });
